@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, sys, os, time, subprocess, hashlib, datetime
+import json, sys, os, time, subprocess, hashlib, datetime, urllib.request
 
 data = json.load(sys.stdin)
 
@@ -88,6 +88,42 @@ def git_info():
 
 git = git_info()
 
+# --- Proxy budget (cached) ---
+BUDGET_CACHE_FILE = '/tmp/claude-statusline-budget-cache'
+BUDGET_CACHE_TTL = 300  # 5 minutes
+
+def proxy_budget():
+    proxy_url = os.environ.get('CLAUDE_PROXY_URL', '').rstrip('/')
+    api_key   = os.environ.get('CLAUDE_PROXY_API_KEY', '')
+    if not proxy_url or not api_key:
+        return None
+    try:
+        if os.path.exists(BUDGET_CACHE_FILE):
+            if time.time() - os.path.getmtime(BUDGET_CACHE_FILE) < BUDGET_CACHE_TTL:
+                with open(BUDGET_CACHE_FILE) as f:
+                    return json.load(f)
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request(
+            proxy_url + '/key/info',
+            headers={'Authorization': f'Bearer {api_key}'},
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+        info = data.get('info', {})
+        result = {
+            'spend':      info.get('spend', 0),
+            'max_budget': info.get('max_budget', 0),
+        }
+        with open(BUDGET_CACHE_FILE, 'w') as f:
+            json.dump(result, f)
+        return result
+    except Exception:
+        return None
+
+budget = proxy_budget()
+
 # --- Line 1: model, directory, git ---
 parts1 = [f"{CYAN}[{model}]{RESET}", f"{dir_link}"]
 
@@ -109,6 +145,14 @@ parts2 = [
     f"{bar_color}{bar}{RESET} {pct}%",
     f"${cost:.2f}",
 ]
+
+if budget:
+    spent     = budget['spend']
+    max_b     = budget['max_budget']
+    remaining = max_b - spent
+    used_pct  = (spent / max_b * 100) if max_b else 0
+    bc        = color_by_pct(used_pct)
+    parts2.append(f"proxy:{bc}${spent:.2f}{RESET}/${max_b:.0f} (${remaining:.2f} left)")
 
 # Rate limits (only when available)
 rate = data.get('rate_limits', {})
