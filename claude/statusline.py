@@ -93,8 +93,8 @@ BUDGET_CACHE_FILE = '/tmp/claude-statusline-budget-cache'
 BUDGET_CACHE_TTL = 300  # 5 minutes
 
 def proxy_budget():
-    proxy_url = os.environ.get('CLAUDE_PROXY_URL', '').rstrip('/')
-    api_key   = os.environ.get('CLAUDE_PROXY_API_KEY', '')
+    proxy_url = os.environ.get('ANTHROPIC_BASE_URL', '').rstrip('/')
+    api_key   = os.environ.get('ANTHROPIC_AUTH_TOKEN', '')
     if not proxy_url or not api_key:
         return None
     try:
